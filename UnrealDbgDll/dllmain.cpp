@@ -341,8 +341,8 @@ bool IniSoftInfo()
             if (Help::iniSoftInfoData.requestflag != args.requestflag)
             {
                 IniResult = false;
+                logger.outDebug(_xor_(L"软件初始化回包校验失败：requestflag 不匹配"));
                 DisableCardOrAccount(cardnum);
-                exit(0);
                 return IniResult;
             }
         }
@@ -406,18 +406,27 @@ void HeartBeat()
             }
             else
             {
+                // 心跳回包校验失败只记录并结束心跳线程。该线程是 detach 的宿主进程线程，
+                // 调用 exit(0) 会把整个调试器前端直接杀掉（表现为点“进入 VT”后闪退）。
+                logger.outDebug(_xor_(L"心跳校验失败：heartbeatkey/requestflag 不匹配。返回requestflag=%s 本地requestflag=%s"),
+                    Common::ConvertLocalCodePageToWideString(heartBeatResult.requestflag).c_str(),
+                    Common::ConvertLocalCodePageToWideString(HeartBeatArgs.requestflag).c_str());
                 DisableCardOrAccount(cardnum);
                 VMProtectEnd();
-                exit(0);
+                return;
 
             }
         }
         else
         {
+            // 心跳请求失败同样不能终止宿主进程，否则 UI 无提示直接闪退。
+            logger.outDebug(_xor_(L"心跳请求失败：code=%d msg=%s"),
+                result.code,
+                Common::ConvertLocalCodePageToWideString(result.msg).c_str());
             Sleep(1000);
             LoginOut(cardnum);
             VMProtectEnd();
-            exit(0);
+            return;
         }
         Sleep(300 * 1000);
 #ifdef  USE_VMP
@@ -451,10 +460,10 @@ bool LoginByCard(string _CardNum)
         if (LoginData.requestflag != args.requestflag)
         {
             IsLoginOk = false;
+            logger.outDebug(_xor_(L"卡密登录回包校验失败：requestflag 不匹配"));
 
             DisableCardOrAccount(_CardNum);
             LoginOut(_CardNum);
-            exit(0);
             return IsLoginOk;
         }
 

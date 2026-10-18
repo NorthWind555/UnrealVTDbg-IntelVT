@@ -103,6 +103,11 @@ typedef BOOL(WINAPI* PFN_GETTHREADCONTEXT)(
     _Inout_ LPCONTEXT lpContext
 );
 
+typedef NTSTATUS(NTAPI* PFN_NTSETCONTEXTTHREAD)(
+    _In_ HANDLE ThreadHandle,
+    _In_ PCONTEXT ThreadContext
+);
+
 typedef BOOL(WINAPI* PFN_VIRTUALPROTECTEX)(
     _In_ HANDLE hProcess,
     _In_ LPVOID lpAddress,
@@ -182,6 +187,7 @@ extern PFN_OUTPUTDEBUGSTRINGW Sys_OutputDebugStringW;
 extern PFN_DBGUIDEBUGACTIVEPROCESS Sys_DbgUiDebugActiveProcess;
 extern PFN_SETTHREADCONTEXT Sys_SetThreadContext;
 extern PFN_GETTHREADCONTEXT Sys_GetThreadContext;
+extern PFN_NTSETCONTEXTTHREAD Sys_NtSetContextThread;
 extern PFN_VIRTUALPROTECTEX Sys_VirtualProtectEx;
 extern PFN_WRITEPROCESSMEMORY Sys_WriteProcessMemory;
 extern PFN_READPROCESSMEMORY Sys_ReadProcessMemory;

@@ -58,12 +58,17 @@ namespace HookDllMainInternal
 
         __try
         {
+            BootTrace("runtime thread enter");
             EarlyHookLog(L"runtime begin");
             InitializeHookLogger(moduleHandle);
+            BootTrace("logger initialized");
             logger.Log("Hook runtime begin");
             InitGlobalVariables();
+            BootTrace("globals initialized");
             InitFunction();
+            BootTrace("function table initialized");
             keepModuleReference = SetupHook();
+            BootTrace(keepModuleReference ? "SetupHook ok" : "SetupHook failed");
             if (!keepModuleReference)
             {
                 exitCode = 1;

@@ -20,6 +20,28 @@ NewSetThreadContext(
     bool hardwareBreakpointsSynced = true;
     if (DebugBreakInternal::HasContextDebugRegisterRequest(lpContext->ContextFlags))
     {
+        // x64dbg/TitanEngine 的部分 bph 路径只写 DR0-DR3 地址，不置 DR7 的 Ln 位，
+        // 实测 SetThreadContext 收到的 DR7 固定为 0x400（仅 bit10），断点永不触发。
+        // 这里按“地址非 0 即视为启用”补齐本地使能位，与调试器意图一致。
+        for (int drIndex = 0; drIndex < DebugBreakInternal::kDebugRegisterCount; ++drIndex)
+        {
+            if (DebugBreakInternal::ReadDebugRegister(lpContext, drIndex) != 0 &&
+                !DebugBreakInternal::IsDebugRegisterEnabled(lpContext->Dr7, drIndex))
+            {
+                lpContext->Dr7 |= (1ull << (drIndex * 2));
+            }
+        }
+
+        logger.Log("[DR] SetThreadContext tid=%u flags=0x%lX dr0=0x%llX dr1=0x%llX dr2=0x%llX dr3=0x%llX dr6=0x%llX dr7=0x%llX",
+            GetThreadId(hThread),
+            lpContext->ContextFlags,
+            lpContext->Dr0,
+            lpContext->Dr1,
+            lpContext->Dr2,
+            lpContext->Dr3,
+            lpContext->Dr6,
+            lpContext->Dr7);
+
         if (!DebugBreakInternal::IsHardwareBreakpointBridgeEnabled())
         {
             if (DebugBreakInternal::HasEnabledDebugRegister(lpContext))
@@ -68,6 +90,108 @@ NewSetThreadContext(
     CONTEXT contextToSet = *lpContext;
     contextToSet.ContextFlags = contextFlagsWithoutDebug;
     return Sys_SetThreadContext(hThread, &contextToSet);
+}
+
+namespace
+{
+    constexpr NTSTATUS kStatusSuccess = 0;
+    constexpr NTSTATUS kStatusInvalidParameter = static_cast<NTSTATUS>(0xC000000Du);
+    constexpr NTSTATUS kStatusNotSupported = static_cast<NTSTATUS>(0xC00000BBu);
+}
+
+// ntdll!NtSetContextThread 代理。
+//
+// 为什么必须单独拦截 ntdll 层：
+//   kernel32!SetThreadContext 只是 ntdll!NtSetContextThread 的薄封装，调试器
+//   （x64dbg/TitanEngine、CE）设置硬件断点时经常直接调用 ntdll 导出以避开 Win32 层。
+//   只 hook kernel32!SetThreadContext 时，bph 请求会静默丢失：调试器侧断点列表显示成功，
+//   VT 侧从未收到 IOCTL_SET_HARDWARE_BREAKPOINT，目标执行时既不命中也不报错。
+//   这里复用 NewSetThreadContext 的桥接逻辑，保证两条调用路径行为一致。
+NTSTATUS NTAPI NewNtSetContextThread(
+    _In_ HANDLE hThread,
+    _In_ PCONTEXT lpContext
+)
+{
+    if (!lpContext)
+    {
+        return Sys_NtSetContextThread(hThread, lpContext);
+    }
+
+    if (DebugBreakInternal::ShouldBypassThreadContextHooks())
+    {
+        return Sys_NtSetContextThread(hThread, lpContext);
+    }
+
+    if (!DebugBreakInternal::HasContextDebugRegisterRequest(lpContext->ContextFlags))
+    {
+        return Sys_NtSetContextThread(hThread, lpContext);
+    }
+
+    CONTEXT context = *lpContext;
+
+    // 与 NewSetThreadContext 一致：补齐 x64dbg 未写入的 DR7 使能位，否则断点永不触发。
+    for (int drIndex = 0; drIndex < DebugBreakInternal::kDebugRegisterCount; ++drIndex)
+    {
+        if (DebugBreakInternal::ReadDebugRegister(&context, drIndex) != 0 &&
+            !DebugBreakInternal::IsDebugRegisterEnabled(context.Dr7, drIndex))
+        {
+            context.Dr7 |= (1ull << (drIndex * 2));
+        }
+    }
+
+    // 诊断：bph 排查期间确认调试器的 DR 请求确实到达 ntdll 层。
+    logger.Log("[DR] NtSetContextThread tid=%u flags=0x%lX dr0=0x%llX dr1=0x%llX dr2=0x%llX dr3=0x%llX dr6=0x%llX dr7=0x%llX",
+        GetThreadId(hThread),
+        context.ContextFlags,
+        context.Dr0,
+        context.Dr1,
+        context.Dr2,
+        context.Dr3,
+        context.Dr6,
+        context.Dr7);
+
+    bool hardwareBreakpointsSynced = true;
+
+    if (!DebugBreakInternal::IsHardwareBreakpointBridgeEnabled())
+    {
+        if (DebugBreakInternal::HasEnabledDebugRegister(&context))
+        {
+            DebugBreakInternal::ClearLocalHardwareBreakpointRecords(true, "硬件断点请求被拒绝");
+            logger.Log("已拒绝硬件断点请求(NtSetContextThread): tid=%u, dr7=0x%llX, 请使用软件INT3断点",
+                GetThreadId(hThread),
+                context.Dr7);
+            return kStatusNotSupported;
+        }
+
+        DebugBreakInternal::ClearLocalHardwareBreakpointRecords(false, "硬件断点桥关闭");
+    }
+    else if (!DebugBreakInternal::IsCurrentHardwareBreakpointState(&context))
+    {
+        hardwareBreakpointsSynced = DebugBreakInternal::SyncHardwareBreakpointsFromContext(&context);
+    }
+
+    // 与 NewSetThreadContext 保持一致：Dr6==0 视为调试器清理命中状态。
+    if (context.Dr6 == 0)
+    {
+        InterlockedExchange(&g_debug_condition_detected, 0);
+        InterlockedExchange(&g_debug_register_status, 0);
+        DebugBreakInternal::ClearDebugHitRecord(GetThreadId(hThread));
+    }
+
+    if (!hardwareBreakpointsSynced)
+    {
+        return kStatusInvalidParameter;
+    }
+
+    const DWORD contextFlagsWithoutDebug =
+        DebugBreakInternal::StripContextDebugRegisterRequest(context.ContextFlags);
+    if (!DebugBreakInternal::HasNonDebugContextRequest(contextFlagsWithoutDebug))
+    {
+        return kStatusSuccess;
+    }
+
+    context.ContextFlags = contextFlagsWithoutDebug;
+    return Sys_NtSetContextThread(hThread, &context);
 }
 
 BOOL WINAPI NewGetThreadContext(

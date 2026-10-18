@@ -8,16 +8,19 @@ namespace hv
         if (!kernelMode)
         {
             PCLIENT_ID cid = GuestCurrentThreadCid();
-            if (cid == nullptr)
+            if (cid != nullptr)
             {
-                outDebug("跳过 inject_single_step：ETHREAD.Cid 尚未就绪。\n");
+                vcpu->Cid.UniqueThread = cid->UniqueThread;
+            }
+            else
+            {
+                // ETHREAD.Cid 偏移未就绪（InitNtoskrnl 初始化为 InvalidOffset，
+                // 只能由 VMCALL_INIT_OFFSET 修正）。Cid 仅用于把命中归属到具体线程，
+                // 缺失时只应退化为"不记录线程"，不能因此吞掉 #DB —— 否则 EPT watch
+                // 命中后调试器永远收不到调试事件，硬件/数据断点表现为完全不生效。
                 vcpu->Cid = { 0 };
-                vcpu->breakpoint_detected = NULL;
-                vcpu->breakpoint_debug_register = -1;
-                return;
             }
 
-            vcpu->Cid.UniqueThread = cid->UniqueThread;
             // Intel event injection 不会替 guest 更新 DR6；快照必须与 #DB 一起投递。
             unsigned __int64 debugRegisterState = vcpu->vmexit_info.guest_registers->dr6;
             debugRegisterState &= ~((1ULL << 14) | 0xFULL);

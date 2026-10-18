@@ -33,6 +33,9 @@ namespace
         { "DebugActiveProcessStop", TryHook_DebugActiveProcessStop, TryUnHook_DebugActiveProcessStop, false },
         { "TerminateProcess", TryHook_TerminateProcess, TryUnHook_TerminateProcess, false },
         { "NtDebugActiveProcess", TryHook_NtDebugActiveProcess, TryUnHook_NtDebugActiveProcess, false },
+        // 打开（File->Open / CreateProcess 调试）路径：创建进程后解析目标 pid/cr3，
+        // 否则 HardwareBreakpointDriver::SetBreakpoint 会因“cr3 或 pid 为空”直接失败。
+        { "NtCreateUserProcess", TryHook_NtCreateUserProcess, TryUnHook_NtCreateUserProcess, false },
         { "NtRemoveProcessDebug", TryHook_NtRemoveProcessDebug, TryUnHook_NtRemoveProcessDebug, false },
         { "NtTerminateProcess", TryHook_NtTerminateProcess, TryUnHook_NtTerminateProcess, false },
         { "DbgUiIssueRemoteBreakin", TryHook_DbgUiIssueRemoteBreakin, TryUnHook_DbgUiIssueRemoteBreakin, false },
@@ -42,6 +45,7 @@ namespace
         { "OutputDebugStringA", TryHook_OutputDebugStringA, TryUnHook_OutputDebugStringA, false },
         { "OutputDebugStringW", TryHook_OutputDebugStringW, TryUnHook_OutputDebugStringW, false },
         { "SetThreadContext", TryHook_SetThreadContext, TryUnHook_SetThreadContext, false },
+        { "NtSetContextThread", TryHook_NtSetContextThread, TryUnHook_NtSetContextThread, false },
         { "GetThreadContext", TryHook_GetThreadContext, TryUnHook_GetThreadContext, false },
         { "NtWriteVirtualMemory", TryHook_NtWriteVirtualMemory, TryUnHook_NtWriteVirtualMemory, false },
         { "NtReadVirtualMemory", TryHook_NtReadVirtualMemory, TryUnHook_NtReadVirtualMemory, false },

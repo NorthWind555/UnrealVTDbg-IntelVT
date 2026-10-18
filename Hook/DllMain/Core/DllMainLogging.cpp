@@ -130,6 +130,52 @@ namespace
 
 namespace HookDllMainInternal
 {
+    void BootTrace(const char* stage) // 启动期文件 trace：不依赖 CRT/logger/全局对象。
+    {
+        if (stage == nullptr)
+        {
+            return;
+        }
+
+        wchar_t tempPath[MAX_PATH] = {};
+        const DWORD tempLength = GetTempPathW(MAX_PATH, tempPath);
+        if (tempLength == 0 || tempLength >= MAX_PATH)
+        {
+            return;
+        }
+
+        wchar_t fullPath[MAX_PATH] = {};
+        lstrcpyW(fullPath, tempPath);
+        lstrcatW(fullPath, L"Hook64_boot.log");
+
+        HANDLE fileHandle = CreateFileW(
+            fullPath,
+            FILE_APPEND_DATA,
+            FILE_SHARE_READ | FILE_SHARE_WRITE,
+            nullptr,
+            OPEN_ALWAYS,
+            FILE_ATTRIBUTE_NORMAL,
+            nullptr);
+        if (fileHandle == INVALID_HANDLE_VALUE)
+        {
+            return;
+        }
+
+        SYSTEMTIME systemTime = {};
+        GetLocalTime(&systemTime);
+        char line[256] = {};
+        wsprintfA(line, "[%02u:%02u:%02u.%03u] %s\r\n",
+            systemTime.wHour,
+            systemTime.wMinute,
+            systemTime.wSecond,
+            systemTime.wMilliseconds,
+            stage);
+
+        DWORD written = 0;
+        WriteFile(fileHandle, line, lstrlenA(line), &written, nullptr);
+        CloseHandle(fileHandle);
+    }
+
     void EarlyHookLog(const wchar_t* message) // Logger 初始化前的早期调试输出，仅走 OutputDebugString。
     {
         if (message == nullptr)

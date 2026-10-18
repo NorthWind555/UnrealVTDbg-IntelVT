@@ -27,6 +27,13 @@ BOOL WINAPI NewGetThreadContext(
     _Inout_ LPCONTEXT lpContext
 );
 
+NTSTATUS
+NTAPI
+NewNtSetContextThread(
+    _In_ HANDLE hThread,
+    _In_ PCONTEXT lpContext
+);
+
 //添加断点
 bool AddBreakpoint(PVOID setAddress, unsigned __int64 command, int length, int debugRegister, int debugRw, int debugLen);
 bool RemoveBreakpoint();

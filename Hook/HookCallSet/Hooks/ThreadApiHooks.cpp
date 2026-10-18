@@ -54,6 +54,35 @@ bool TryUnHook_GetThreadContext()
     return true;
 }
 
+// x64dbg/TitanEngine 等调试器可能绕过 kernel32!SetThreadContext，直接调用
+// ntdll!NtSetContextThread 写入 DRx。这里补上 ntdll 层拦截，避免 bph 请求静默丢失。
+bool TryHook_NtSetContextThread()
+{
+    Sys_NtSetContextThread = ResolveNtSetContextThread();
+    assert(Sys_NtSetContextThread);
+    if (Sys_NtSetContextThread)
+    {
+        const bool hooked = HookOn((PVOID*)&Sys_NtSetContextThread, NewNtSetContextThread, GetCurrentThread());
+        logger.Log("NtSetContextThread Hook 安装%s: addr=0x%llX",
+            hooked ? "成功" : "失败",
+            reinterpret_cast<unsigned __int64>(Sys_NtSetContextThread));
+        return hooked;
+    }
+
+    logger.Log("NtSetContextThread空指针");
+    return false;
+}
+
+bool TryUnHook_NtSetContextThread()
+{
+    if (Sys_NtSetContextThread)
+    {
+        return HookOff((PVOID*)&Sys_NtSetContextThread, NewNtSetContextThread, GetCurrentThread());
+    }
+
+    return true;
+}
+
 void Hook_SetThreadContext()
 {
     (void)TryHook_SetThreadContext();

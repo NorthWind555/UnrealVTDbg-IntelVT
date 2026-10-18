@@ -123,6 +123,17 @@ inline PFN_NTREADVIRTUALMEMORY ResolveNtReadVirtualMemory()
     return procedure;
 }
 
+inline PFN_NTSETCONTEXTTHREAD ResolveNtSetContextThread()
+{
+    static PFN_NTSETCONTEXTTHREAD procedure = nullptr;
+    if (procedure == nullptr)
+    {
+        procedure = reinterpret_cast<PFN_NTSETCONTEXTTHREAD>(
+            ResolveNtdllProcedure("NtSetContextThread"));
+    }
+    return procedure;
+}
+
 inline PFN_DBGUSERBREAKPOINT ResolveDbgUserBreakPoint()
 {
     static PFN_DBGUSERBREAKPOINT procedure = nullptr;

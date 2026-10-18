@@ -12,11 +12,14 @@ BOOL WINAPI DllMain(
     {
     case DLL_PROCESS_ATTACH:
     {
+        HookDllMainInternal::BootTrace("DllMain attach enter");
         DisableThreadLibraryCalls(hinstDLL);
         if (!HookDllMainInternal::StartHookRuntime(hinstDLL))
         {
+            HookDllMainInternal::BootTrace("StartHookRuntime failed");
             bRet = FALSE;
         }
+        HookDllMainInternal::BootTrace("DllMain attach leave");
         break;
     }
 

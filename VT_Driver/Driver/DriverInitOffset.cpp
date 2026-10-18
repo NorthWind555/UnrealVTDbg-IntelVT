@@ -45,6 +45,8 @@ bool InitOffset(PWINDOWS_STRUCT vmcallinfo, unsigned __int64 verifyKey) // 从�
         tmp_vmcallinfo.ethread_offset_Cid == WINDOWS_OFFSET_INVALID ||
         tmp_vmcallinfo.ethread_offset_Cid > WINDOWS_OFFSET_REASONABLE_MAX)
     {
+        outFile("InitOffset 失败：ethread_offset_Cid 非法 (0x%llX)。\n",
+            tmp_vmcallinfo.ethread_offset_Cid);
         return false;
     }
 
@@ -74,6 +76,12 @@ bool InitOffset(PWINDOWS_STRUCT vmcallinfo, unsigned __int64 verifyKey) // 从�
     {
         hv::ghv.kapc_state_process_offset = tmp_vmcallinfo.kapc_state_offset_Process;
     }
+
+    // InitOffset 成功路径的可观测性：Release 下 outDebug 是空宏，此前无任何痕迹，
+    // 无法判断 ETHREAD.Cid 是否就绪（GuestCurrentThreadCid 依赖它）。
+    outFile("[VT][InitOffset] OK: ETHREAD.Cid=0x%p DirectoryTableBase=0x%p\n",
+        (PVOID)ethread_offset::Cid,
+        (PVOID)hv::ghv.kprocess_directory_table_base_offset);
 
     return true;
 }

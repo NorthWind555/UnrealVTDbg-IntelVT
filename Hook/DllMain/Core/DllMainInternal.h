@@ -23,6 +23,8 @@ namespace HookDllMainInternal
     extern DWORD g_HookRuntimeThreadId;
 
     void EarlyHookLog(const wchar_t* message);
+    // 启动期文件 trace：不依赖 CRT/logger，用于定位 DllMain/runtime 卡死点。
+    void BootTrace(const char* stage);
     void InitializeHookLogger(HINSTANCE moduleHandle);
     bool VerifyDriverHandshake();
     DWORD WINAPI HookRuntimeThread(LPVOID parameter);
